@@ -9,7 +9,7 @@ constexpr int PSEUDO_REPEATED_LENGTH = 2;
 
 void CA::RLEcompress(std::string source, std::string outputName)
 {
-    char buffer[BLOCK_SIZE];
+    char buffer[BLOCK_SIZE + 2]; // to prevent using data out of range
 
     FILE *fin = fopen(source.c_str(), "rb");
 
@@ -37,9 +37,10 @@ void CA::RLEcompress(std::string source, std::string outputName)
             int counterRS = 0;
             int counterSS = 0;            
 
-            for(int i = 0; i < readBytes - 1; i++)
+            for(int j = 0; j < readBytes; j++)
             {
-                if(buffer[i] == buffer[i + 1])
+                if(buffer[j] == buffer[j + 1] &&
+                        (buffer[j] == buffer[j + 2] || !counterSS || counterRS))
                 {
                     counterRS++;
                     singleSeriesEnded = true;
@@ -56,15 +57,11 @@ void CA::RLEcompress(std::string source, std::string outputName)
                 {
                     counterRS++;
 
-                    if(prevSeriesWasSingles && counterRS == PSEUDO_REPEATED_LENGTH)
-                    {
-                        prevSeriesWasSingles = false;
-                        std::string additionalData(PSEUDO_REPEATED_LENGTH, buffer[i]);
-                        results[results.size() - 1].second.append(additionalData);
-                        results[results.size() - 1].first -= PSEUDO_REPEATED_LENGTH; //because there are negative number
-                    }
-                    else
-                        results.emplace_back(counterRS, std::string(buffer + i, buffer + i + 1));
+                    if(counterRS == 11 && buffer[j] =='8')
+                        repeatedSeriesEnded = false;
+
+                    results.emplace_back(counterRS, std::string(1, buffer[j]));
+
 
                     repeatedSeriesEnded = false;
                     singleSeriesEnded = false;
@@ -74,13 +71,11 @@ void CA::RLEcompress(std::string source, std::string outputName)
                 }
                 else if(counterSS && singleSeriesEnded)
                 {
-                    auto k = -1 * counterSS;
-
                     std::string series;
-                    for(int j = counterSS; j > 0; j--)
-                        series.push_back(buffer[i - j]);
+                    for(int k = counterSS; k > 0; k--)
+                        series.push_back(buffer[j - k]);
 
-                    results.emplace_back(k, series);
+                    results.emplace_back(counterSS * (-1), series);
 
                     repeatedSeriesEnded = false;
                     singleSeriesEnded = false;
@@ -88,10 +83,19 @@ void CA::RLEcompress(std::string source, std::string outputName)
                     counterRS = 0;
                     counterSS = 0;
 
-                    prevSeriesWasSingles = true;
-
-                    i -= 1; //necessary step back
+                    j--; //necessary step back
                 }
+            }
+
+            if(counterRS)
+                results.emplace_back(counterRS, std::string(1, buffer[readBytes - 1]));
+            else if(counterSS)
+            {
+                std::string series;
+                for(int j = counterSS; j > 0; j--)
+                    series.push_back(buffer[readBytes - j]);
+
+                results.emplace_back(counterSS * (-1), series);
             }
         }
 
@@ -141,21 +145,21 @@ void CA::RLEunpack(std::string source, std::string outputName)
             // Read "BLOCK_SIZE" bytes to buffer
             auto readBytes = fread(buffer, sizeof(unsigned char), BLOCK_SIZE, fin);
 
-            for(int i = 0; i < readBytes; i++)
+            for(int j = 0; j < readBytes; j++)
             {
-                if(buffer[i] > 0)
+                if(buffer[j] > 0)
                 {
-                    if(i == readBytes - 1)
+                    if(j == readBytes - 1)
                     {
                         auto pos = ftell(fin);
                         if(fseek(fin, pos - 1, SEEK_SET) != 0 && ferror(fin))
                             std::cerr << "error during reading the file" << std::endl;
-                        i = readBytes;
+                        j = readBytes;
                     }
                     else
                     {
-                        result += std::string(buffer[i], buffer[i + 1]);
-                        i++;
+                        result += std::string(buffer[j], buffer[j + 1]);
+                        j++;
                     }
                 }
                 else
@@ -163,14 +167,14 @@ void CA::RLEunpack(std::string source, std::string outputName)
                     if((readBytes - i) < std::abs(buffer[i]))
                     {
                         auto pos = ftell(fin);
-                        if(fseek(fin, pos - (readBytes - i), SEEK_SET) != 0 && ferror(fin))
+                        if(fseek(fin, pos - (readBytes - j), SEEK_SET) != 0 && ferror(fin))
                             std::cerr << "error during reading the file" << std::endl;
-                        i = readBytes;
+                        j = readBytes;
                     }
                     else
                     {
-                        result += std::string(buffer + i + 1, buffer + i + 1 + std::abs(buffer[i]));
-                        i+= std::abs(buffer[i]);
+                        result += std::string(buffer + j + 1, buffer + j + 1 + std::abs(buffer[j]));
+                        j+= std::abs(buffer[j]);
                     }
                 }
             }
