@@ -27,5 +27,14 @@ BOOST_AUTO_TEST_CASE(RLE_test_real_data)
 
     CA::RLEcompress("basset", "basset.cmp");
     CA::RLEunpack("basset.cmp", "basset.out");
+
+    CA::RLEcompress("photo.jpg", "photo.cmp");
+    CA::RLEunpack("photo.cmp", "photo.out.jpg");
+
+    CA::RLEcompress("audio.mp3", "audio.cmp");
+    CA::RLEunpack("audio.cmp", "audio.out.mp3");
+
+    CA::RLEcompress("archive.zip", "archive.cmp");
+    CA::RLEunpack("archive.cmp", "archive.out.zip");
 }
 BOOST_AUTO_TEST_SUITE_END()
