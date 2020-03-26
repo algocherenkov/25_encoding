@@ -57,11 +57,7 @@ void CA::RLEcompress(std::string source, std::string outputName)
                 {
                     counterRS++;
 
-                    if(counterRS == 11 && buffer[j] =='8')
-                        repeatedSeriesEnded = false;
-
                     results.emplace_back(counterRS, std::string(1, buffer[j]));
-
 
                     repeatedSeriesEnded = false;
                     singleSeriesEnded = false;
@@ -87,6 +83,7 @@ void CA::RLEcompress(std::string source, std::string outputName)
                 }
             }
 
+            //in case if last series didn't pushed into the store
             if(counterRS)
                 results.emplace_back(counterRS, std::string(1, buffer[readBytes - 1]));
             else if(counterSS)
@@ -149,12 +146,12 @@ void CA::RLEunpack(std::string source, std::string outputName)
             {
                 if(buffer[j] > 0)
                 {
-                    if(j == readBytes - 1)
+                    if(j == readBytes - 1) //check for case when the border between chunks of data cuts the series
                     {
                         auto pos = ftell(fin);
                         if(fseek(fin, pos - 1, SEEK_SET) != 0 && ferror(fin))
                             std::cerr << "error during reading the file" << std::endl;
-                        j = readBytes;
+                        j = readBytes; //break the inner cycle
                     }
                     else
                     {
@@ -164,12 +161,12 @@ void CA::RLEunpack(std::string source, std::string outputName)
                 }
                 else
                 {
-                    if((readBytes - i) < std::abs(buffer[i]))
+                    if((readBytes - j - 1) < std::abs(buffer[j])) //check for case when the border between chunks of data cuts the series
                     {
                         auto pos = ftell(fin);
                         if(fseek(fin, pos - (readBytes - j), SEEK_SET) != 0 && ferror(fin))
                             std::cerr << "error during reading the file" << std::endl;
-                        j = readBytes;
+                        j = readBytes; //break the inner cycle
                     }
                     else
                     {
