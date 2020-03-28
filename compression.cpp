@@ -5,7 +5,8 @@
 #include <map>
 
 constexpr int BLOCK_SIZE = 256;
-constexpr int PSEUDO_REPEATED_LENGTH = 2;
+constexpr int REPEATED_SERIES_MAX_LENGTH = 127;
+constexpr int SINGLE_SERIES_MAX_LENGTH = 128;
 
 void CA::RLEcompress(std::string source, std::string outputName)
 {
@@ -32,12 +33,10 @@ void CA::RLEcompress(std::string source, std::string outputName)
             bool repeatedSeriesEnded = false;
             bool singleSeriesEnded = false;
 
-            bool prevSeriesWasSingles = false;
-
             int counterRS = 0;
             int counterSS = 0;            
 
-            for(int j = 0; j < readBytes; j++)
+            for(size_t j = 0; j < readBytes; j++)
             {
                 if(buffer[j] == buffer[j + 1] &&
                         (buffer[j] == buffer[j + 2] || !counterSS || counterRS))
@@ -53,7 +52,7 @@ void CA::RLEcompress(std::string source, std::string outputName)
                     singleSeriesEnded = false;
                 }
 
-                if(counterRS && repeatedSeriesEnded)
+                if((counterRS && repeatedSeriesEnded) || counterRS == REPEATED_SERIES_MAX_LENGTH - 1)
                 {
                     counterRS++;
 
@@ -64,9 +63,14 @@ void CA::RLEcompress(std::string source, std::string outputName)
 
                     counterRS = 0;
                     counterSS = 0;
+
+                    if(counterRS == REPEATED_SERIES_MAX_LENGTH)
+                        j++;
                 }
-                else if(counterSS && singleSeriesEnded)
+                else if((counterSS && singleSeriesEnded) || counterSS == SINGLE_SERIES_MAX_LENGTH)
                 {
+                    if(counterSS == SINGLE_SERIES_MAX_LENGTH)
+                        j++;
                     std::string series;
                     for(int k = counterSS; k > 0; k--)
                         series.push_back(buffer[j - k]);
@@ -126,23 +130,17 @@ void CA::RLEunpack(std::string source, std::string outputName)
     FILE *fin = fopen(source.c_str(), "rb");
 
     if(fin != nullptr)
-    {        
-        // The end of the file
-        fseek(fin, 0, SEEK_END);
-        // Get size of the file
-        double m_file_size = ftell(fin);
-        // Go to start
-        rewind(fin);
-
+    {
         std::string result;
+        size_t readBytes = 1;
 
         // Read and write by "BLOCK_SIZE" bytes
-        for(size_t i = 0; i < std::ceil(m_file_size / BLOCK_SIZE); ++i)
+        while(readBytes)
         {
             // Read "BLOCK_SIZE" bytes to buffer
-            auto readBytes = fread(buffer, sizeof(unsigned char), BLOCK_SIZE, fin);
+            readBytes = fread(buffer, sizeof(unsigned char), BLOCK_SIZE, fin);
 
-            for(int j = 0; j < readBytes; j++)
+            for(size_t j = 0; j < readBytes; j++)
             {
                 if(buffer[j] > 0)
                 {
@@ -161,7 +159,7 @@ void CA::RLEunpack(std::string source, std::string outputName)
                 }
                 else
                 {
-                    if((readBytes - j - 1) < std::abs(buffer[j])) //check for case when the border between chunks of data cuts the series
+                    if(static_cast<int>((readBytes - j - 1)) < std::abs(buffer[j])) //check for case when the border between chunks of data cuts the series
                     {
                         auto pos = ftell(fin);
                         if(fseek(fin, pos - (readBytes - j), SEEK_SET) != 0 && ferror(fin))
